@@ -23,19 +23,21 @@
 --      (5.1) - Usuario Functions
 --      (5.2) - CartaoCredito Functions
 --      (5.3) - Evento Functions
---      (5.4) - String Functions
+--      (5.4) - Ingresso Functions
+--      (5.5) - String Functions
 -- (6.0) - Constraint
 --      (6.1) - Usuario restrictions
 --      (6.2) - CartaoCredito restrictions
 --      (6.3) - Evento restrictions
 --      (6.4) - Apresentacao restrictions
 --      (6.5) - Ingresso restrictions
--- (7.0) - Testes e debug
---      (7.1) - Restrict do DELETE de um CPF com referencia
---      (7.2) - Cascade do Código de Evento em Apresentacao
---      (7.3) - Teste dos restrictions Usuario
---      (7.4) - Teste dos restrictions Apresentacao
---      (7.5) - Teste dos restrictions Evento
+-- (7.0) - Procedures
+-- (8.0) - Testes e debug
+--      (8.1) - Restrict do DELETE de um CPF com referencia
+--      (8.2) - Cascade do Código de Evento em Apresentacao
+--      (8.3) - Teste dos restrictions Usuario
+--      (8.4) - Teste dos restrictions Apresentacao
+--      (8.5) - Teste dos restrictions Evento
 -- -----------------------------------------------------
 
 
@@ -189,7 +191,7 @@ ALTER TABLE ONLY Ingresso
 -- -----------------------------------------------------
 -- (4.0) - Views
 -- -----------------------------------------------------
-CREATE VIEW 
+
 
 
 
@@ -494,7 +496,26 @@ BEGIN
 END $$;
 
 -- -----------------------------------------------------
--- (5.4) - String Functions
+-- (5.4) - Ingresso Functions
+-- -----------------------------------------------------
+
+CREATE OR REPLACE FUNCTION VerificarDisponibilidade () RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE 
+    QtdDisponivel INTEGER := (SELECT Disponibilidade FROM Apresentacao WHERE NEW.fkCodigoApresentacao = idCodigoApresentacao) - NEW.Quantidade;
+BEGIN
+    IF (QtdDisponivel >= 0) THEN
+        UPDATE Apresentacao SET Disponibilidade = QtdDisponivel WHERE NEW.fkCodigoApresentacao = idCodigoApresentacao;
+    ELSE 
+        RAISE EXCEPTION 'Quantidade requerida nao disponivel';
+    END IF;
+
+    RETURN NEW;
+END $$;
+
+-- -----------------------------------------------------
+-- (5.5) - String Functions
 -- -----------------------------------------------------
 CREATE OR REPLACE FUNCTION Is_upper (Caractere CHAR(1)) RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -614,32 +635,28 @@ ALTER TABLE      Ingresso
   CHECK          (idCodigoIngresso >= 0 AND idCodigoIngresso <= 99999);
 
 CREATE TRIGGER   tValidarQuantidade
-BEFORE UPDATE ON Ingresso
-DECLARE 
-DisponibilidadeAtual INTEGER;
-BEGIN
-      SET DisponibilidadeAtual = (SELECT Dispobilidade FROM Apresentacao WHERE idCodigoApresentacao = Ingresso.fkCodigoApresentacao) - Quantidade;
-      IF  DisponibilidadeAtual >= 0 THEN
-          UPDATE Apresentacao
-          SET    Disponibilidade = DisponibilidadeAtual
-          WHERE  idCodigoApresentacao = Ingresso.fkCodigoApresentacao;
-      ELSE
-          RESTRICT;
-      END IF;
-END;
+  BEFORE UPDATE ON Ingresso
+  FOR EACH ROw
+  EXECUTE PROCEDURE VerificarDisponibilidade();
 
 
 -- -----------------------------------------------------
--- (7.0) - Testes e debug
+-- (7.0) - Procedures
+-- -----------------------------------------------------
+
+
+
+-- -----------------------------------------------------
+-- (8.0) - Testes e debug
 -- ----------------------------------------------------- 
--- (7.1) - Restrict do DELETE de um CPF com referencia
+-- (8.1) - Restrict do DELETE de um CPF com referencia
 -- -----------------------------------------------------
 INSERT INTO Usuario       VALUES ('05370637148', '1234aA', '19/01/20');
-INSERT INTO CartaoCredito VALUES (1238938388332, '01/20', '123', '05370637148');
+INSERT INTO CartaoCredito VALUES ('5318786776323503', '01/20', '123', '05370637148');
 DELETE FROM Usuario WHERE idCPF = '05370637148';
 
 -- ----------------------------------------------------- 
--- (7.2) - Cascade do Código de Evento em Apresentacao
+-- (8.2) - Cascade do Código de Evento em Apresentacao
 -- -----------------------------------------------------
 INSERT INTO Usuario       VALUES ('05370637148', '1234aA', '19/01/20');
 INSERT INTO Evento        VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'GO', '18', 1);
@@ -648,7 +665,7 @@ UPDATE Evento SET idCodigoEvento = 2 WHERE idCodigoEvento = 1;
 SELECT * FROM Apresentacao WHERE idCodigoApresentacao = 1;
 
 -- ----------------------------------------------------- 
--- (7.3) - Teste dos restrictions Usuario
+-- (8.3) - Teste dos restrictions Usuario
 -- -----------------------------------------------------
 -- Teste do validar CPF
 DELETE FROM Usuario;
@@ -663,7 +680,7 @@ INSERT INTO Usuario VALUES ('05370637142', '12345A', '19/01/20'); -- CPF Invalid
 SELECT * FROM Usuario;
 
 -- ----------------------------------------------------- 
--- (7.4) - Teste dos restrictions CartaoCredito
+-- (8.4) - Teste dos restrictions CartaoCredito
 -- -----------------------------------------------------
 DELETE FROM CartaoCredito;
 INSERT INTO CartaoCredito VALUES ('5467097237169470', '0299', 999, '05370637148');
@@ -676,7 +693,7 @@ INSERT INTO CartaoCredito VALUES ('5318786776323503', '0299', 999, '05370637148'
 SELECT * FROM CartaoCredito;
 
 -- ----------------------------------------------------- 
--- (7.5) - Teste dos restrictions Evento
+-- (8.5) - Teste dos restrictions Evento
 -- -----------------------------------------------------
 -- Verifica formato do nome do evento
 DELETE FROM Evento;
@@ -706,3 +723,12 @@ INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'GO', '11
 INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'GO', '12', 1);
 SELECT * FROM Evento;
 
+-- ----------------------------------------------------- 
+-- (8.5) - Teste dos restrictions Ingresso
+-- -----------------------------------------------------
+DELETE FROM Ingresso;
+INSERT INTO Ingresso VALUES (1, 1, '05370637148', 151);
+INSERT INTO Ingresso VALUES (3, 1, '05370637148', 150);
+INSERT INTO Ingresso VALUES (2, 1, '05370637148',   1);
+SELECT * FROM Ingresso;
+select * from Apresentacao;
