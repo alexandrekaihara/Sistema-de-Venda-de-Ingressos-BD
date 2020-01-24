@@ -2,6 +2,10 @@
 -- Criar procedures do CRUD
 -- Criar todas as views
 -- Criar usuarios e as permissoes
+-- Criar as trigger que impedem:
+--      deletar evento se tiver apresentação com ingresso vendido;
+-- Testar as procedures de insert
+
 
 -- -----------------------------------------------------
 -- Autores: 
@@ -99,7 +103,7 @@
 -- (1.3) - Table Evento
 -- -----------------------------------------------------
     CREATE TABLE IF NOT EXISTS Evento (
-        idCodigoEvento        INT,
+        idCodigoEvento        BIGSERIAL,
         fkCPF                 CHAR(11) NOT NULL,
         NomeEvento            VARCHAR(19) NOT NULL,
         Cidade                VARCHAR(16) NOT NULL,
@@ -115,7 +119,7 @@
 -- (1.4) - Table Apresentacao
 -- -----------------------------------------------------
     CREATE TABLE IF NOT EXISTS Apresentacao (
-        idCodigoApresentacao  INT,
+        idCodigoApresentacao  BIGSERIAL,
         fkCodigoEvento        INT   NOT NULL,
         Preco                 FLOAT NOT NULL, 
         DataHorario           TIMESTAMP NOT NULL,
@@ -130,7 +134,7 @@
 -- (1.5) - Table Ingresso
 -- -----------------------------------------------------
     CREATE TABLE IF NOT EXISTS Ingresso (
-        idCodigoIngresso      INT NOT NULL,
+        idCodigoIngresso      BIGSERIAL,
         fkCodigoApresentacao  INT NOT NULL,
         fkCPF                 CHAR(11) NOT NULL,
         Quantidade            SMALLINT NOT NULL);
@@ -167,19 +171,17 @@
     ALTER TABLE ONLY CartaoCredito
     ADD CONSTRAINT fkCPF FOREIGN KEY (fkCPF) 
     REFERENCES     Usuario(idCPF)
-    ON DELETE      RESTRICT
     ON UPDATE      RESTRICT;
 
     ALTER TABLE ONLY Evento
     ADD CONSTRAINT fkCPF FOREIGN KEY (fkCPF) 
     REFERENCES     Usuario(idCPF)
-    ON DELETE      RESTRICT;
+    ON DELETE RESTRICT;
     
     ALTER TABLE ONLY Apresentacao
     ADD CONSTRAINT fkCodigoEvento FOREIGN KEY (fkCodigoEvento) 
     REFERENCES     Evento(idCodigoEvento)
-    ON UPDATE      CASCADE
-    ON DELETE      RESTRICT;
+    ON UPDATE      CASCADE;
 
     ALTER TABLE ONLY Ingresso
     ADD CONSTRAINT fkCodigoApresentacao FOREIGN KEY (fkCodigoApresentacao) 
@@ -190,8 +192,7 @@
     ALTER TABLE ONLY Ingresso
     ADD CONSTRAINT fkCPF FOREIGN KEY (fkCPF) 
     REFERENCES     Usuario(idCPF)
-    ON DELETE      CASCADE
-    ON UPDATE      RESTRICT;
+    ON DELETE      RESTRICT;
 
 
 
@@ -649,6 +650,41 @@
 -- -----------------------------------------------------
 -- (7.1) - Procedures Create        
 -- -----------------------------------------------------
+    CREATE OR REPLACE PROCEDURE CriarUsuario (CPF CHAR(11), Senha CHAR(6), DataNascimento DATE)
+    LANGUAGE plpgsql
+    AS $insertusuario$
+    BEGIN
+    INSERT INTO Usuario VALUES (CPF, Senha, DataNascimento); 
+    END $insertusuario$;
+
+    CREATE OR REPLACE PROCEDURE CriarCartaoCredito (NumeroCartaoCredito CHAR(16), DataValidade CHAR(4), CodigoSeguranca SMALLINT, fkCPF CHAR(11))
+    LANGUAGE plpgsql
+    AS $insertcartaocredito$
+    BEGIN
+    INSERT INTO CartaoCredito VALUES (NumeroCartaoCredito, DataValidade, CodigoSeguranca, fkCPF); 
+    END $insertcartaocredito$;
+
+    CREATE OR REPLACE PROCEDURE CriarEvento (fkCPF CHAR(11), NomeEvento CHAR(19), Cidade CHAR(16), FaixaEtaria VARCHAR(2), Estado CHAR(2), ClasseEvento SMALLINT)
+    LANGUAGE plpgsql
+    AS $insertevento$
+    BEGIN
+    INSERT INTO Evento (fkCPF, NomeEvento, Cidade, FaixaEtaria, Estado, ClasseEvento) VALUES (fkCPF, NomeEvento, Cidade, FaixaEtaria, Estado, ClasseEvento); 
+    END $insertevento$;
+
+    CREATE OR REPLACE PROCEDURE CriarApresentacao (fkCodigoEvento INTEGER, Preco SMALLINT, DataHorario TIMESTAMP, NumeroSala SMALLINT, Disponibilidade SMALLINT)
+    LANGUAGE plpgsql
+    AS $insertapresentacao$
+    BEGIN
+    INSERT INTO Apresentacao (fkCodigoEvento, Preco, DataHorario, NumeroSala, Disponibilidade) VALUES (fkCodigoEvento, Preco, DataHorario, NumeroSala, Disponibilidade); 
+    END $insertapresentacao$;
+
+    CREATE OR REPLACE PROCEDURE CriarIngresso (fkCodigoApresentacao  INTEGER, fkCPF CHAR(11), Quantidade SMALLINT)
+    LANGUAGE plpgsql
+    AS $insertingresso$
+    BEGIN
+    INSERT INTO Ingresso (fkCodigoApresentacao, fkCPF, Quantidade) VALUES (fkCodigoApresentacao, fkCPF, Quantidade); 
+    END $insertingresso$;
+
 -- -----------------------------------------------------
 -- (7.2) - Procedures Read
 -- -----------------------------------------------------
@@ -664,16 +700,16 @@
 -- ----------------------------------------------------- 
 -- (8.1) - Restrict do DELETE de um CPF com referencia
 -- -----------------------------------------------------
-    INSERT INTO Usuario       VALUES ('05370637148', '1234aA', '19/01/20');
-    INSERT INTO CartaoCredito VALUES ('5318786776323503', '01/20', '123', '05370637148');
+    CALL CriarUsuario       ('03515226036', '1234aA', '19/01/20');
+    CALL CriarCartaoCredito ('5467097237169470', '0120', '123', '05370637148');
     DELETE FROM Usuario WHERE idCPF = '05370637148';
 
 -- ----------------------------------------------------- 
 -- (8.2) - Cascade do Código de Evento em Apresentacao
 -- -----------------------------------------------------
-    INSERT INTO Usuario       VALUES ('05370637148', '1234aA', '19/01/20');
-    INSERT INTO Evento        VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1);
-    INSERT INTO Apresentacao  VALUES (1, 1, 123, '19/01/20 19:00:00', 2, 150);
+    CALL CriarUsuario ('05370637148', '1234aA', '19/01/20');
+    CALL CriarEvento ('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1)::SMALLINT;
+    CALL CriarCartaoCredito (1, 1, 123, '19/01/20 19:00:00', 2, 150);
     UPDATE Evento SET idCodigoEvento = 2 WHERE idCodigoEvento = 1;
     SELECT * FROM Apresentacao WHERE idCodigoApresentacao = 1;
 
@@ -682,58 +718,59 @@
 -- -----------------------------------------------------
     -- Teste do validar CPF
     DELETE FROM Usuario;
-    INSERT INTO Usuario VALUES ('05370637148', '1234aA', '19/01/20'); -- CPF Valido
-    INSERT INTO Usuario VALUES ('05370637142', '1234aA', '19/01/20'); -- CPF Invalido
+    CALL CriarUsuario ('05370637148', '1234aA', '19/01/20'); -- CPF Valido
+    CALL CriarUsuario ('05370637142', '1234aA', '19/01/20'); -- CPF Invalido
     SELECT * FROM Usuario;
 
     -- Teste do validar senha
     DELETE FROM Usuario;
-    INSERT INTO Usuario VALUES ('05370637148', '1234aA', '19/01/20'); -- CPF Valido
-    INSERT INTO Usuario VALUES ('05370637142', '12345A', '19/01/20'); -- CPF Invalido
+    CALL CriarUsuario ('05370637148', '1234aA', '19/01/20'); -- CPF Valido
+    CALL CriarUsuario ('05370637142', '12345A', '19/01/20'); -- CPF Invalido
     SELECT * FROM Usuario;
 
 -- ----------------------------------------------------- 
 -- (8.4) - Teste dos restrictions CartaoCredito
 -- -----------------------------------------------------
     DELETE FROM CartaoCredito;
-    INSERT INTO CartaoCredito VALUES ('5467097237169470', '0299', 999, '05370637148');
-    INSERT INTO CartaoCredito VALUES ('5467097237169471', '0299', 999, '05370637148');
+    CALL CriarCartaoCredito ('5467097237169470', '0299', 999, '05370637148');
+    CALL CriarCartaoCredito ('5467097237169471', '0299', 999, '05370637148');
     SELECT * FROM CartaoCredito;
 
     DELETE FROM CartaoCredito;
-    INSERT INTO CartaoCredito VALUES ('5467097237169470', '0099', 999, '05370637148');
-    INSERT INTO CartaoCredito VALUES ('5467097237169470', '0299', 999, '05370637148');
+    CALL CriarCartaoCredito ('5467097237169470', '0099', 999, '05370637148');
+    CALL CriarCartaoCredito ('5467097237169470', '0299', 999, '05370637148');
     SELECT * FROM CartaoCredito;
 
 -- ----------------------------------------------------- 
 -- (8.5) - Teste dos restrictions Evento
 -- -----------------------------------------------------
     -- Verifica formato do nome do evento
+
     DELETE FROM Evento;
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in  Rio', 'Formosa', 'L', 'GO', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in @Rio', 'Formosa', 'L', 'GO', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio' , 'Formosa', 'L', 'GO', 1);
+    CALL CriarEvento('05370637148', 'Rock in  Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in @Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio' , 'Formosa', 'L', 'GO', 1::SMALLINT);
     SELECT * FROM Evento;
 
     -- Verifica a validade da cidade
     DELETE FROM Evento;
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa.2', 'L', 'GO', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa@' , 'L', 'GO', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa.a', 'L', 'GO', 1);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa.2', 'L', 'GO', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa@' , 'L', 'GO', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa.a', 'L', 'GO', 1::SMALLINT);
     SELECT * FROM Evento;
 
     -- Verifica a validade da estado
     DELETE FROM Evento;
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'L', 'Go', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'L', 'GA', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', 'L', 'Go', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GA', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
     SELECT * FROM Evento;
 
     -- Verifica a validade da FaixaEtaria
     DELETE FROM Evento;
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', 'A', 'GO', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', '11', 'GO', 1);
-    INSERT INTO Evento VALUES (1, '05370637148', 'Rock in Rio', 'Formosa', '12', 'GO', 1);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', ' A', 'GO', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', '11', 'GO', 1::SMALLINT);
+    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', '12', 'GO', 1::SMALLINT);
     SELECT * FROM Evento;
 
 -- ----------------------------------------------------- 
