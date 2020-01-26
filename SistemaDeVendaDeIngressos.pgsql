@@ -3,8 +3,11 @@
 -- Criar todas as views
 -- Criar usuarios e as permissoes
 -- Criar as trigger que impedem:
---      deletar evento se tiver apresentação com ingresso vendido;
+--      - deletar evento se tiver apresentação com ingresso vendido
+--      - atualizar o cpf de um usuario;
 -- Testar as procedures de insert
+-- Testar procedures update
+-- Inserir backup e recuperação do database
 
 
 -- -----------------------------------------------------
@@ -199,13 +202,31 @@
 -- -----------------------------------------------------
 -- (4.0) - Views
 -- -----------------------------------------------------
+
+    CREATE OR REPLACE VIEW ShowUsuario 
+    AS SELECT * FROM Usuario;
+
+    CREATE OR REPLACE VIEW ShowCartaoCredito 
+    AS SELECT * FROM CartaoCredito;
+
+    CREATE OR REPLACE VIEW ShowEvento 
+    AS SELECT * FROM Evento;
+
+    CREATE OR REPLACE VIEW ShowApresentacao 
+    AS SELECT * FROM Apresentacao;
+
+    CREATE OR REPLACE VIEW ShowIngresso
+    AS SELECT * FROM Ingresso;
+
+
+
 -- -----------------------------------------------------
 -- (5.0) - Functions
 -- -----------------------------------------------------
 -- -----------------------------------------------------
 -- (5.1) - Usuario Functions
 -- -----------------------------------------------------
-    CREATE OR REPLACE FUNCTION ValidarCPF(CPF CHAR(11)) RETURNS BOOLEAN
+    CREATE OR REPLACE OR REPLACE FUNCTION ValidarCPF(CPF CHAR(11)) RETURNS BOOLEAN
     LANGUAGE plpgsql
     AS $$
     DECLARE
@@ -691,9 +712,79 @@
 -- -----------------------------------------------------
 -- (7.3) - Procedures Update
 -- -----------------------------------------------------
+    CREATE OR REPLACE PROCEDURE UpdateUsuario (uOldCPF CHAR(11), uNewCPF CHAR(11), uSenha CHAR(6), uDatadeNascimento DATE)
+    LANGUAGE plpgsql
+    AS $updateusuario$
+    BEGIN
+    UPDATE Usuario SET idCPF = uNewCPF, Senha = uSenha, DatadeNascimento = uDatadeNascimento WHERE idCPF = uOldCPF; 
+    END $updateusuario$;
+
+    CREATE OR REPLACE PROCEDURE UpdateCartaoCredito (uOldNumeroCartaoCredito CHAR(16), uNewNumeroCartaoCredito CHAR(16), uDataValidade CHAR(4), uCodigoSeguranca SMALLINT, ufkCPF CHAR(11))
+    LANGUAGE plpgsql
+    AS $updatecartaocredito$
+    BEGIN
+    UPDATE CartaoCredito SET NumeroCartaoCredito = uNewNumeroCartaoCredito, DataValidade = uDataValidade, CodigoSeguranca = uCodigoSeguranca, fkCPF = ufkCPF WHERE NumeroCartaoCredito = uOldNumeroCartaoCredito; 
+    END $updatecartaocredito$;
+
+    CREATE OR REPLACE PROCEDURE UpdateEvento (uOldidCodigoEvento INTEGER, uNewidCodigoEvento INTEGER, fkCPF CHAR(11), NomeEvento CHAR(19), Cidade CHAR(16), FaixaEtaria VARCHAR(2), Estado CHAR(2), ClasseEvento SMALLINT)
+    LANGUAGE plpgsql
+    AS $updateevento$
+    BEGIN
+    UPDATE Evento SET idCodigoEvento = uNewidCodigoEvento, fkCPF = ufkCPF, NomeEvento = uNomeEvento, Cidade = uCidade, FaixaEtaria = uFaixaEtaria, Estado = uEstado, ClasseEvento = uClasseEvento WHERE idCodigoEvento = uOldidCodigoEvento;
+    END $updateevento$;
+
+    CREATE OR REPLACE PROCEDURE UpdateApresentacao (uOldidCodigoApresentacao INTEGER, uNewidCodigoApresentacao INTEGER, ufkCodigoEvento INTEGER, uPreco SMALLINT, uDataHorario TIMESTAMP, uNumeroSala SMALLINT, uDisponibilidade SMALLINT)
+    LANGUAGE plpgsql
+    AS $updateapresentacao$
+    BEGIN
+    UPDATE Apresentacao SET idCodigoApresentacao = uNewidCodigoApresentacao,  fkCodigoEvento = ufkCodigoEvento, Preco = uPreco, DataHorario = uDataHorario, NumeroSala = uNumeroSala, Disponibilidade = uDisponibilidade WHERE idCodigoApresentacao = uOldidCodigoApresentacao; 
+    END $updateapresentacao$;
+
+    CREATE OR REPLACE PROCEDURE UpdateIngresso (uOldidCodigoIngresso INTEGER, uNewidCodigoIngresso INTEGER, ufkCodigoApresentacao  INTEGER, ufkCPF CHAR(11), uQuantidade SMALLINT)
+    LANGUAGE plpgsql
+    AS $updateingresso$
+    BEGIN
+    UPDATE Ingresso SET idCodigoIngresso = uNewidCodigoIngresso, fkCodigoApresentacao = ufkCodigoApresentacao, fkCPF = ufkCPF, Quantidade = uQuantidade WHERE idCodigoIngresso = uOldidCodigoIngresso; 
+    END $updateingresso$;
+
 -- -----------------------------------------------------
 -- (7.4) - Procedures Delete
 -- -----------------------------------------------------
+    CREATE OR REPLACE PROCEDURE DeleteUsuario (uCPF CHAR(11), uSenha CHAR(6), uDatadeNascimento DATE)
+    LANGUAGE plpgsql
+    AS $deleteusuario$
+    BEGIN
+    DELETE FROM Usuario WHERE idCPF = uCPF AND Senha = uSenha AND DatadeNascimento = uDatadeNascimento; 
+    END $deleteusuario$;
+
+    CREATE OR REPLACE PROCEDURE DeleteCartaoCredito (uNumeroCartaoCredito CHAR(16), uDataValidade CHAR(4), uCodigoSeguranca SMALLINT, ufkCPF CHAR(11))
+    LANGUAGE plpgsql
+    AS $deletecartaocredito$
+    BEGIN
+    DELETE FROM CartaoCredito WHERE NumeroCartaoCredito = uNumeroCartaoCredito AND DataValidade = uDataValidade AND CodigoSeguranca = uCodigoSeguranca AND fkCPF = ufkCPF; 
+    END $deletecartaocredito$;
+
+    CREATE OR REPLACE PROCEDURE DeleteEvento (uidCodigoEvento INTEGER, fkCPF CHAR(11), NomeEvento CHAR(19), Cidade CHAR(16), FaixaEtaria VARCHAR(2), Estado CHAR(2), ClasseEvento SMALLINT)
+    LANGUAGE plpgsql
+    AS $deleteevento$
+    BEGIN
+    DELETE FROM Evento WHERE idCodigoEvento = uidCodigoEvento AND fkCPF = ufkCPF AND NomeEvento = uNomeEvento AND Cidade = uCidade AND FaixaEtaria = uFaixaEtaria AND Estado = uEstado AND ClasseEvento = uClasseEvento;
+    END $deleteevento$;
+
+    CREATE OR REPLACE PROCEDURE DeleteApresentacao (uidCodigoApresentacao INTEGER, ufkCodigoEvento INTEGER, uPreco SMALLINT, uDataHorario TIMESTAMP, uNumeroSala SMALLINT, uDisponibilidade SMALLINT)
+    LANGUAGE plpgsql
+    AS $deleteapresentacao$
+    BEGIN
+    DELETE FROM Apresentacao WHERE idCodigoApresentacao = uidCodigoApresentacao AND  fkCodigoEvento = ufkCodigoEvento AND Preco = uPreco AND DataHorario = uDataHorario AND NumeroSala = uNumeroSala AND Disponibilidade = uDisponibilidade; 
+    END $deleteapresentacao$;
+
+    CREATE OR REPLACE PROCEDURE DeleteIngresso (uidCodigoIngresso INTEGER, ufkCodigoApresentacao  INTEGER, ufkCPF CHAR(11), uQuantidade SMALLINT)
+    LANGUAGE plpgsql
+    AS $deleteingresso$
+    BEGIN
+    DELETE FROM Ingresso WHERE idCodigoIngresso = uidCodigoIngresso AND fkCodigoApresentacao = ufkCodigoApresentacao AND fkCPF = ufkCPF AND Quantidade = uQuantidade; 
+    END $deleteingresso$;
+
 -- -----------------------------------------------------
 -- (8.0) - Testes e debug
 -- -----------------------------------------------------
@@ -777,9 +868,9 @@
 -- (8.6) - Teste dos restrictions Ingresso
 -- -----------------------------------------------------
     DELETE FROM Ingresso;
-    INSERT INTO Ingresso VALUES (1, 1, '05370637148', 151);
-    INSERT INTO Ingresso VALUES (3, 1, '05370637148', 150);
-    INSERT INTO Ingresso VALUES (2, 1, '05370637148',   1);
+    CALL CriarIngresso (1::SMALLINT, '05370637148', 151::SMALLINT);
+    CALL CriarIngresso (1::SMALLINT, '05370637148', 150::SMALLINT);
+    CALL CriarIngresso (1::SMALLINT, '05370637148',   1::SMALLINT);
     SELECT * FROM Ingresso;
     select * from Apresentacao;
 
@@ -788,4 +879,3 @@
 -- -----------------------------------------------------
 -- (9.0) - Create Users
 -- ----------------------------------------------------- 
-
