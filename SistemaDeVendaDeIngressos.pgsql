@@ -1,9 +1,14 @@
+-- Para que serve o controle de fluxo e onde estudar?
+-- O que é uma role e o atributo de replication?
+-- Como fazer garantir acesso a adicionar, update e delete de so algumas
+-- tabelas para um grupo de usuarios e dar acesso irrestrito a outro grupo?
+-- Como fazer com que um usuario do sistema utulize o banco de dados sem
+-- ter login para conectar ao banco?
+
 -- Ajustes:
--- Criar procedures do CRUD
 -- Criar todas as views
 -- Criar usuarios e as permissoes
 -- Criar as trigger que impedem:
---      - deletar evento se tiver apresentação com ingresso vendido
 --      - atualizar o cpf de um usuario;
 -- Testar as procedures de insert
 -- Testar procedures update
@@ -17,8 +22,8 @@
 -- Disciplina: Bancos de Dados
 --
 -- Palavras-chave para busca:
--- (0.0) - Database bancosdedados2020
--- (0.1) - Schema venda_ingressos
+-- Database bancosdedados2020
+-- (0.0) - Create Users
 -- (1.0) - Create Tables
 --      (1.1) - Table Usuario
 --      (1.2) - Table CartaoCredito
@@ -51,27 +56,47 @@
 --      (8.3) - Teste dos restrictions Usuario
 --      (8.4) - Teste dos restrictions Apresentacao
 --      (8.5) - Teste dos restrictions Evento
--- (9.0) - Create Users
 -- -----------------------------------------------------
 
 
 
 -- -----------------------------------------------------
--- (0.0) - Database bancosdedados2020
+-- Database bancosdedados2020
 -- -----------------------------------------------------
     DROP DATABASE bancosdedados2020;
     CREATE DATABASE bancosdedados2020 ENCODING = 'UTF8' LC_COLLATE = 'Portuguese_Brazil.1252' LC_CTYPE = 'Portuguese_Brazil.1252';
     ALTER DATABASE  bancosdedados2020 OWNER TO postgres;
     \c bancosdedados2020
 
-
-
--- -----------------------------------------------------
--- (0.1) - Schema venda_ingressos
--- -----------------------------------------------------
     CREATE SCHEMA venda_ingressos AUTHORIZATION postgres;
     SET search_path TO venda_ingressos, public;
 
+
+
+-- -----------------------------------------------------
+-- (0.0) - Create users
+-- -----------------------------------------------------
+-- -----------------------------------------------------
+-- (0.1) - Create Administradores
+-- ----------------------------------------------------- 
+
+    CREATE ROLE Administrator WITH
+    SUPERUSER 
+    CREATEDB
+    CREATEROLE;
+
+    GRANT ALL  ON ALL TABLES IN SCHEMA venda_ingressos TO Administrator;
+
+    CREATE USER adm WITH 
+    ADMIN Administrator
+    PASSWORD '123';
+
+-- -----------------------------------------------------
+-- (0.2) - Create Usuarios comuns
+-- ----------------------------------------------------- 
+
+    CREATE ROLE LoginUsuario;
+    
 
 
 -- -----------------------------------------------------
@@ -82,6 +107,7 @@
 -- -----------------------------------------------------
     CREATE TABLE IF NOT EXISTS Usuario(
         idCPF               CHAR   (11) NOT NULL,
+        Nome                VARCHAR(20) NOT NULL UNIQUE,
         Senha               VARCHAR( 6) NOT NULL,
         DatadeNascimento    DATE NOT NULL);
 
@@ -179,23 +205,24 @@
     ALTER TABLE ONLY Evento
     ADD CONSTRAINT fkCPF FOREIGN KEY (fkCPF) 
     REFERENCES     Usuario(idCPF)
-    ON DELETE RESTRICT;
+    ON UPDATE      RESTRICT;
     
     ALTER TABLE ONLY Apresentacao
     ADD CONSTRAINT fkCodigoEvento FOREIGN KEY (fkCodigoEvento) 
     REFERENCES     Evento(idCodigoEvento)
-    ON UPDATE      CASCADE;
+    ON UPDATE      CASCADE
+    ON DELETE      CASCADE;
 
     ALTER TABLE ONLY Ingresso
     ADD CONSTRAINT fkCodigoApresentacao FOREIGN KEY (fkCodigoApresentacao) 
     REFERENCES     Apresentacao(idCodigoApresentacao)
-    ON UPDATE      CASCADE 
+    ON UPDATE      CASCADE
     ON DELETE      RESTRICT;
 
     ALTER TABLE ONLY Ingresso
     ADD CONSTRAINT fkCPF FOREIGN KEY (fkCPF) 
     REFERENCES     Usuario(idCPF)
-    ON DELETE      RESTRICT;
+    ON UPDATE      RESTRICT;
 
 
 
@@ -218,7 +245,16 @@
     CREATE OR REPLACE VIEW ShowIngresso
     AS SELECT * FROM Ingresso;
 
+    CREATE OR REPLACE VIEW NIngressosVendidosEvento
+    AS (SELECT SUM(i.Quantidade), fkCodigoEvento
+    FROM Apresentacao a 
+    JOIN Ingresso i ON a.idCodigoApresentacao = i.fkCodigoApresentacao
+    GROUP BY a.fkCodigoEvento);
 
+    CREATE OR REPLACE VIEW NIngressosVendidosApresentacao
+    AS SELECT SUM(i.Quantidade) AS Total, fkCodigoApresentacao
+    FROM Ingresso i
+    GROUP BY i.fkCodigoApresentacao;
 
 -- -----------------------------------------------------
 -- (5.0) - Functions
@@ -226,7 +262,7 @@
 -- -----------------------------------------------------
 -- (5.1) - Usuario Functions
 -- -----------------------------------------------------
-    CREATE OR REPLACE OR REPLACE FUNCTION ValidarCPF(CPF CHAR(11)) RETURNS BOOLEAN
+    CREATE OR REPLACE FUNCTION ValidarCPF(CPF CHAR(11)) RETURNS BOOLEAN
     LANGUAGE plpgsql
     AS $$
     DECLARE
@@ -341,6 +377,22 @@
     END IF;
 
     RETURN Valido;
+    END $$;
+
+    CREATE OR REPLACE FUNCTION CriarLoginOnDB() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        EXECUTE FORMAT ('CREATE USER ' || NEW.Nome || ' WITH PASSWORD ''' || NEW.Senha || ''' IN GROUP LoginUsuario') USING NEW.Senha; 
+        RETURN NEW;
+    END $$;
+
+    CREATE OR REPLACE FUNCTION DeletarLoginOnDB() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        EXECUTE FORMAT ('DROP ROLE ' || OLD.Nome);
+        RETURN NULL;
     END $$;
 
 -- -----------------------------------------------------
@@ -519,6 +571,17 @@
     END IF;
     END $$;
 
+    CREATE OR REPLACE FUNCTION VerificarVendaIngressoEvento () RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+    IF (SELECT SUM FROM NIngressosVendidosEvento AS ni WHERE ni.fkCodigoEvento = NEW.idCodigoEvento IS NOT NULL) THEN
+        RAISE EXCEPTION '\n\nEvento nao pode ser deletado por haver ingressos vendidos\n\n';
+    ELSE
+        RETURN NEW;        
+    END IF;
+    END $$;
+
 -- -----------------------------------------------------
 -- (5.4) - Ingresso Functions
 -- -----------------------------------------------------
@@ -532,7 +595,7 @@
     IF (QtdDisponivel >= 0) THEN
         UPDATE Apresentacao SET Disponibilidade = QtdDisponivel WHERE NEW.fkCodigoApresentacao = idCodigoApresentacao;
     ELSE 
-        RAISE EXCEPTION 'Quantidade requerida nao disponivel';
+        RAISE EXCEPTION '\n\nQuantidade requerida nao disponivel\n\n';
     END IF;
 
     RETURN NEW;
@@ -590,6 +653,16 @@
     ADD CONSTRAINT cValidarSenha 
     CHECK (ValidarSenha(Senha));
 
+    CREATE TRIGGER CriarLoginUsuario
+    AFTER INSERT ON Usuario
+    FOR EACH ROW 
+    EXECUTE PROCEDURE CriarLoginOnDB();
+
+    CREATE TRIGGER DeletarLoginUsuario
+    AFTER DELETE ON Usuario
+    FOR EACH ROW 
+    EXECUTE PROCEDURE DeletarLoginOnDB();
+
 -- -----------------------------------------------------
 -- (6.2) - CartaoCredito restrictions
 -- -----------------------------------------------------
@@ -608,29 +681,34 @@
 -- -----------------------------------------------------
 -- (6.3) - Evento restrictions
 -- -----------------------------------------------------
-    ALTER TABLE      Evento
+    ALTER TABLE    Evento
     ADD CONSTRAINT cValidaridCodigoEvento 
     CHECK          (idCodigoEvento >= 0 AND idCodigoEvento <= 999);
 
-    ALTER TABLE      Evento
+    ALTER TABLE    Evento
     ADD CONSTRAINT cValidarNomeEvento 
     CHECK          (ValidarNomeEvento(NomeEvento));
 
-    ALTER TABLE      Evento
+    ALTER TABLE    Evento
     ADD CONSTRAINT cValidarCidade 
     CHECK          (ValidarCidade(Cidade));
 
-    ALTER TABLE      Evento
+    ALTER TABLE    Evento
     ADD CONSTRAINT cValidarEstado
     CHECK          (ValidarEstado(Estado));
 
-    ALTER TABLE      Evento
+    ALTER TABLE    Evento
     ADD CONSTRAINT cValidarFaixaEtaria 
     CHECK          (ValidarFaixaEtaria(FaixaEtaria));
 
-    ALTER TABLE      Evento
+    ALTER TABLE    Evento
     ADD CONSTRAINT cValidarClasseEvento 
     CHECK          (ClasseEvento >= 1 AND ClasseEvento <= 4);
+
+    CREATE TRIGGER cVerificarVendaIngressoEvento
+    BEFORE DELETE ON Evento
+    FOR EACH ROw
+    EXECUTE PROCEDURE VerificarVendaIngressoEvento ();
 
 -- -----------------------------------------------------
 -- (6.4) - Apresentacao restrictions
@@ -660,7 +738,7 @@
 
     CREATE TRIGGER   tValidarQuantidade
     BEFORE INSERT ON Ingresso
-    FOR EACH ROw
+    FOR EACH ROW
     EXECUTE PROCEDURE VerificarDisponibilidade();
 
 
@@ -671,11 +749,11 @@
 -- -----------------------------------------------------
 -- (7.1) - Procedures Create        
 -- -----------------------------------------------------
-    CREATE OR REPLACE PROCEDURE CriarUsuario (CPF CHAR(11), Senha CHAR(6), DataNascimento DATE)
+    CREATE OR REPLACE PROCEDURE CriarUsuario (CPF CHAR(11), Nome VARCHAR(20), Senha CHAR(6), DataNascimento DATE)
     LANGUAGE plpgsql
     AS $insertusuario$
     BEGIN
-    INSERT INTO Usuario VALUES (CPF, Senha, DataNascimento); 
+    INSERT INTO Usuario VALUES (CPF, Nome, Senha, DataNascimento); 
     END $insertusuario$;
 
     CREATE OR REPLACE PROCEDURE CriarCartaoCredito (NumeroCartaoCredito CHAR(16), DataValidade CHAR(4), CodigoSeguranca SMALLINT, fkCPF CHAR(11))
@@ -692,7 +770,7 @@
     INSERT INTO Evento (fkCPF, NomeEvento, Cidade, FaixaEtaria, Estado, ClasseEvento) VALUES (fkCPF, NomeEvento, Cidade, FaixaEtaria, Estado, ClasseEvento); 
     END $insertevento$;
 
-    CREATE OR REPLACE PROCEDURE CriarApresentacao (fkCodigoEvento INTEGER, Preco SMALLINT, DataHorario TIMESTAMP, NumeroSala SMALLINT, Disponibilidade SMALLINT)
+    CREATE OR REPLACE PROCEDURE CriarApresentacao (fkCodigoEvento INTEGER, Preco FLOAT, DataHorario TIMESTAMP, NumeroSala SMALLINT, Disponibilidade SMALLINT)
     LANGUAGE plpgsql
     AS $insertapresentacao$
     BEGIN
@@ -712,11 +790,11 @@
 -- -----------------------------------------------------
 -- (7.3) - Procedures Update
 -- -----------------------------------------------------
-    CREATE OR REPLACE PROCEDURE UpdateUsuario (uOldCPF CHAR(11), uNewCPF CHAR(11), uSenha CHAR(6), uDatadeNascimento DATE)
+    CREATE OR REPLACE PROCEDURE UpdateUsuario (uOldCPF CHAR(11), uNewCPF CHAR(11), uNome VARCHAR(20), uSenha CHAR(6), uDatadeNascimento DATE)
     LANGUAGE plpgsql
     AS $updateusuario$
     BEGIN
-    UPDATE Usuario SET idCPF = uNewCPF, Senha = uSenha, DatadeNascimento = uDatadeNascimento WHERE idCPF = uOldCPF; 
+    UPDATE Usuario SET idCPF = uNewCPF, Nome = uNome, Senha = uSenha, DatadeNascimento = uDatadeNascimento WHERE idCPF = uOldCPF; 
     END $updateusuario$;
 
     CREATE OR REPLACE PROCEDURE UpdateCartaoCredito (uOldNumeroCartaoCredito CHAR(16), uNewNumeroCartaoCredito CHAR(16), uDataValidade CHAR(4), uCodigoSeguranca SMALLINT, ufkCPF CHAR(11))
@@ -791,91 +869,79 @@
 -- ----------------------------------------------------- 
 -- (8.1) - Restrict do DELETE de um CPF com referencia
 -- -----------------------------------------------------
-    CALL CriarUsuario       ('03515226036', '1234aA', '19/01/20');
+    -- Verifica se o cpf com referencia não pode ser atualizado 
+    -- e nem deletado
+    CALL CriarUsuario       ('05370637148', 'Alexandre', '1234aA', '19/01/20');
     CALL CriarCartaoCredito ('5467097237169470', '0120', '123', '05370637148');
-    DELETE FROM Usuario WHERE idCPF = '05370637148';
-
+    UPDATE Usuario SET idCPF = '57219981058' WHERE idCPF = '05370637148';
+    DELETE FROM Usuario;
+    
 -- ----------------------------------------------------- 
 -- (8.2) - Cascade do Código de Evento em Apresentacao
 -- -----------------------------------------------------
-    CALL CriarUsuario ('05370637148', '1234aA', '19/01/20');
-    CALL CriarEvento ('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1)::SMALLINT;
-    CALL CriarCartaoCredito (1, 1, 123, '19/01/20 19:00:00', 2, 150);
+    -- Verifica se houve atualizacao do codigo evento 
+    CALL CriarEvento ('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
+    CALL CriarApresentacao (1, 123.0, '19/01/20 19:00:00', 2::SMALLINT, 150::SMALLINT);
     UPDATE Evento SET idCodigoEvento = 2 WHERE idCodigoEvento = 1;
-    SELECT * FROM Apresentacao WHERE idCodigoApresentacao = 1;
+    SELECT * FROM Apresentacao;
 
 -- ----------------------------------------------------- 
 -- (8.3) - Teste dos restrictions Usuario
 -- -----------------------------------------------------
     -- Teste do validar CPF
-    DELETE FROM Usuario;
-    CALL CriarUsuario ('05370637148', '1234aA', '19/01/20'); -- CPF Valido
-    CALL CriarUsuario ('05370637142', '1234aA', '19/01/20'); -- CPF Invalido
-    SELECT * FROM Usuario;
+    DELETE FROM Usuario CASCADE;
+    CALL CriarUsuario ('05370637142', 'Alexandre', '1234aA', '19/01/20'); -- CPF Invalido
 
     -- Teste do validar senha
-    DELETE FROM Usuario;
-    CALL CriarUsuario ('05370637148', '1234aA', '19/01/20'); -- CPF Valido
-    CALL CriarUsuario ('05370637142', '12345A', '19/01/20'); -- CPF Invalido
-    SELECT * FROM Usuario;
-
+    CALL CriarUsuario ('05370637148', 'Alexandre', '12345A', '19/01/20'); -- CPF Invalido
+    
 -- ----------------------------------------------------- 
 -- (8.4) - Teste dos restrictions CartaoCredito
 -- -----------------------------------------------------
-    DELETE FROM CartaoCredito;
-    CALL CriarCartaoCredito ('5467097237169470', '0299', 999, '05370637148');
-    CALL CriarCartaoCredito ('5467097237169471', '0299', 999, '05370637148');
-    SELECT * FROM CartaoCredito;
+    CALL CriarUsuario ('05370637148', 'Alexandre', '1234aA', '19/01/20'); -- CPF Valido
 
-    DELETE FROM CartaoCredito;
-    CALL CriarCartaoCredito ('5467097237169470', '0099', 999, '05370637148');
-    CALL CriarCartaoCredito ('5467097237169470', '0299', 999, '05370637148');
-    SELECT * FROM CartaoCredito;
+    -- Verifica a vaidade do numero de cartao de credito
+    CALL CriarCartaoCredito ('5467097237169471', '0299', 999::SMALLINT, '05370637148');
 
+    -- Verifica a validade da data de validade
+    CALL CriarCartaoCredito ('5467097237169470', '0099', 999::SMALLINT, '05370637148');    SELECT * FROM CartaoCredito;
+
+    -- Cartao valido
+    CALL CriarCartaoCredito ('5467097237169470', '0299', 999::SMALLINT, '05370637148');    SELECT * FROM CartaoCredito;
+    
 -- ----------------------------------------------------- 
 -- (8.5) - Teste dos restrictions Evento
 -- -----------------------------------------------------
     -- Verifica formato do nome do evento
-
-    DELETE FROM Evento;
     CALL CriarEvento('05370637148', 'Rock in  Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
     CALL CriarEvento('05370637148', 'Rock in @Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
-    CALL CriarEvento('05370637148', 'Rock in Rio' , 'Formosa', 'L', 'GO', 1::SMALLINT);
-    SELECT * FROM Evento;
 
     -- Verifica a validade da cidade
-    DELETE FROM Evento;
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa.2', 'L', 'GO', 1::SMALLINT);
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa@' , 'L', 'GO', 1::SMALLINT);
-    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa.a', 'L', 'GO', 1::SMALLINT);
-    SELECT * FROM Evento;
 
     -- Verifica a validade da estado
-    DELETE FROM Evento;
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', 'L', 'Go', 1::SMALLINT);
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GA', 1::SMALLINT);
-    CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
-    SELECT * FROM Evento;
 
     -- Verifica a validade da FaixaEtaria
-    DELETE FROM Evento;
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', ' A', 'GO', 1::SMALLINT);
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', '11', 'GO', 1::SMALLINT);
+
+    -- Verifica se quando um evento é vendido, não pode ser deletado
     CALL CriarEvento('05370637148', 'Rock in Rio', 'Formosa', '12', 'GO', 1::SMALLINT);
-    SELECT * FROM Evento;
+    CALL CriarApresentacao (1, 123.0, '19/01/20 19:00:00', 2::SMALLINT, 150::SMALLINT);
+    CALL CriarIngresso (1::SMALLINT, '05370637148', 150::SMALLINT);
+    DELETE FROM EVENTO;
 
 -- ----------------------------------------------------- 
 -- (8.6) - Teste dos restrictions Ingresso
 -- -----------------------------------------------------
-    DELETE FROM Ingresso;
+    -- Verifica se a quantidade de ingressos comprados tem disponivel
+    -- e se disponivel, alterou na tabela apresentacao
+    SELECT * FROM Apresentacao;
     CALL CriarIngresso (1::SMALLINT, '05370637148', 151::SMALLINT);
     CALL CriarIngresso (1::SMALLINT, '05370637148', 150::SMALLINT);
-    CALL CriarIngresso (1::SMALLINT, '05370637148',   1::SMALLINT);
-    SELECT * FROM Ingresso;
-    select * from Apresentacao;
+    SELECT * FROM Apresentacao;
 
 
-
--- -----------------------------------------------------
--- (9.0) - Create Users
--- ----------------------------------------------------- 
