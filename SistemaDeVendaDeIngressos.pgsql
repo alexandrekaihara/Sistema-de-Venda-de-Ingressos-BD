@@ -1,13 +1,4 @@
--- Para que serve o controle de fluxo e onde estudar?
--- O que é uma role e o atributo de replication?
--- Como fazer garantir acesso a adicionar, update e delete de so algumas
--- tabelas para um grupo de usuarios e dar acesso irrestrito a outro grupo?
--- Como fazer com que um usuario do sistema utulize o banco de dados sem
--- ter login para conectar ao banco?
-
--- Ajustes:
--- Criar todas as views
--- Criar usuarios e as permissoes
+-- PENDENCIAS:
 -- Criar as trigger que impedem:
 --      - atualizar o cpf de um usuario;
 -- Testar as procedures de insert
@@ -24,38 +15,47 @@
 -- Palavras-chave para busca:
 -- Database bancosdedados2020
 -- (0.0) - Create Users
+    -- (0.1) - Create Administradores
+    -- (0.2) - Create Usuarios comuns
+    -- (0.3) - Create Visitantes
 -- (1.0) - Create Tables
---      (1.1) - Table Usuario
---      (1.2) - Table CartaoCredito
---      (1.3) - Table Evento
---      (1.4) - Table Apresentacao
---      (1.5) - Table Ingresso
+    -- (1.1) - Table Usuario
+    -- (1.2) - Table CartaoCredito
+    -- (1.3) - Table Evento
+    -- (1.4) - Table Apresentacao
+    -- (1.5) - Table Ingresso
 -- (2.0) - Primary keys
 -- (3.0) - Foreign keys
--- (4.0) - Views
--- (5.0) - Functions
---      (5.1) - Usuario Functions
---      (5.2) - CartaoCredito Functions
---      (5.3) - Evento Functions
---      (5.4) - Ingresso Functions
---      (5.5) - String Functions
--- (6.0) - Constraint
---      (6.1) - Usuario restrictions
---      (6.2) - CartaoCredito restrictions
---      (6.3) - Evento restrictions
---      (6.4) - Apresentacao restrictions
---      (6.5) - Ingresso restrictions
--- (7.0) - Procedures
---      (7.1) - Procedures Create        
---      (7.2) - Procedures Read
---      (7.3) - Procedures Update
---      (7.4) - Procedures Delete
--- (8.0) - Testes e debug
---      (8.1) - Restrict do DELETE de um CPF com referencia
---      (8.2) - Cascade do Código de Evento em Apresentacao
---      (8.3) - Teste dos restrictions Usuario
---      (8.4) - Teste dos restrictions Apresentacao
---      (8.5) - Teste dos restrictions Evento
+-- (4.0) - Create policy
+    -- (4.1) - Create policy Usuario
+    -- (4.2) - Create policy CartaoCredito
+    -- (4.3) - Create policy Evento
+    -- (4.4) - Create policy Apresentacao
+    -- (4.5) - Create policy Ingresso
+-- (5.0) - Views
+-- (6.0) - Functions
+    -- (6.1) - Usuario Functions
+    -- (6.2) - CartaoCredito Functions
+    -- (6.3) - Evento Functions
+    -- (6.4) - Ingresso Functions
+    -- (6.5) - String Functions
+-- (7.0) - Constraint
+    -- (7.1) - Usuario restrictions
+    -- (7.2) - CartaoCredito restrictions
+    -- (7.3) - Evento restrictions
+    -- (7.4) - Apresentacao restrictions
+    -- (7.5) - Ingresso restrictions
+-- (8.0) - Procedures
+    -- (8.1) - Procedures Create   
+    -- (8.2) - Procedures Read
+    -- (8.3) - Procedures Update
+    -- (8.4) - Procedures Delete
+-- (9.0) - Testes e debug
+    -- (9.1) - Restrict do DELETE de um CPF com referencia
+    -- (9.2) - Cascade do Código de Evento em Apresentacao
+    -- (9.3) - Teste dos restrictions Usuario
+    -- (9.4) - Teste dos restrictions Apresentacao
+    -- (9.5) - Teste dos restrictions Evento
 -- -----------------------------------------------------
 
 
@@ -81,14 +81,17 @@
 -- ----------------------------------------------------- 
 
     CREATE ROLE Administrator WITH
-    SUPERUSER 
-    CREATEDB
-    CREATEROLE;
+    SUPERUSER
+    CREATEROLE
+    INHERIT;
 
-    GRANT ALL  ON ALL TABLES IN SCHEMA venda_ingressos TO Administrator;
+    GRANT ALL PRIVILEGES ON DATABASE bancosdedados2020 TO Administrator;
+    GRANT CONNECT ON DATABASE        bancosdedados2020 TO Administrator;
+    GRANT ALL PRIVILEGES ON SCHEMA   venda_ingressos   TO Administrator;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA venda_ingressos TO Administrator;
 
     CREATE USER adm WITH 
-    ADMIN Administrator
+    IN ROLE Administrator
     PASSWORD '123';
 
 -- -----------------------------------------------------
@@ -96,7 +99,17 @@
 -- ----------------------------------------------------- 
 
     CREATE ROLE LoginUsuario;
-    
+
+    GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginUsuario;
+
+-- -----------------------------------------------------
+-- (0.3) - Create Visitantes
+-- ----------------------------------------------------- 
+
+    CREATE ROLE LoginVisitante;
+
+    GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginVisitante;
+    GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginVisitante;
 
 
 -- -----------------------------------------------------
@@ -227,7 +240,59 @@
 
 
 -- -----------------------------------------------------
--- (4.0) - Views
+-- (4.0) - Create policy
+-- ----------------------------------------------------- 
+
+    ALTER TABLE Usuario       ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE CartaoCredito ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE Evento        ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE Apresentacao  ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE Ingresso      ENABLE ROW LEVEL SECURITY;
+
+-- -----------------------------------------------------
+-- (4.1) - Create policy Usuario
+-- ----------------------------------------------------- 
+
+    CREATE POLICY LoginUsuario ON Usuario
+    FOR SELECT 
+    USING (user_name = current_user)
+
+-- -----------------------------------------------------
+-- (4.2) - Create policy CartaoCredito
+-- ----------------------------------------------------- 
+
+    CREATE POLICY LoginUsuario ON CartaoCredito
+    FOR SELECT 
+    USING (user_name = current_user)
+
+-- -----------------------------------------------------
+-- (4.3) - Create policy Evento
+-- ----------------------------------------------------- 
+
+    CREATE POLICY LoginUsuario ON Evento
+    FOR SELECT 
+    USING (user_name = current_user)
+
+-- -----------------------------------------------------
+-- (4.4) - Create policy Apresentacao
+-- ----------------------------------------------------- 
+
+    CREATE POLICY LoginUsuario ON Apresentacao
+    FOR SELECT 
+    USING (user_name = current_user)
+
+-- -----------------------------------------------------
+-- (4.5) - Create policy Ingresso
+-- ----------------------------------------------------- 
+
+    CREATE POLICY LoginUsuario ON Ingresso
+    FOR SELECT 
+    USING (user_name = current_user)
+
+
+
+-- -----------------------------------------------------
+-- (5.0) - Views
 -- -----------------------------------------------------
 
     CREATE OR REPLACE VIEW ShowUsuario 
@@ -257,10 +322,10 @@
     GROUP BY i.fkCodigoApresentacao;
 
 -- -----------------------------------------------------
--- (5.0) - Functions
+-- (6.0) - Functions
 -- -----------------------------------------------------
 -- -----------------------------------------------------
--- (5.1) - Usuario Functions
+-- (6.1) - Usuario Functions
 -- -----------------------------------------------------
     CREATE OR REPLACE FUNCTION ValidarCPF(CPF CHAR(11)) RETURNS BOOLEAN
     LANGUAGE plpgsql
@@ -396,7 +461,7 @@
     END $$;
 
 -- -----------------------------------------------------
--- (5.2) - CartaoCredito Functions
+-- (6.2) - CartaoCredito Functions
 -- -----------------------------------------------------
     CREATE OR REPLACE FUNCTION ValidarNumeroCartaoCredito(NumeroCartaoCredito CHAR(16)) RETURNS BOOLEAN
     LANGUAGE plpgsql
@@ -441,7 +506,7 @@
     END $$;
 
 -- -----------------------------------------------------
--- (5.3) - Evento Functions
+-- (6.3) - Evento Functions
 -- -----------------------------------------------------
     CREATE OR REPLACE FUNCTION ValidarNomeEvento(NomeEvento VARCHAR(19)) RETURNS BOOLEAN
     LANGUAGE plpgsql
@@ -583,7 +648,7 @@
     END $$;
 
 -- -----------------------------------------------------
--- (5.4) - Ingresso Functions
+-- (6.4) - Ingresso Functions
 -- -----------------------------------------------------
 
     CREATE OR REPLACE FUNCTION VerificarDisponibilidade () RETURNS TRIGGER
@@ -602,7 +667,7 @@
     END $disp$;
 
 -- -----------------------------------------------------
--- (5.5) - String Functions
+-- (6.5) - String Functions
 -- -----------------------------------------------------
     CREATE OR REPLACE FUNCTION Is_upper (Caractere CHAR(1)) RETURNS BOOLEAN
     LANGUAGE plpgsql
@@ -640,10 +705,10 @@
 
 
 -- -----------------------------------------------------
--- (6.0) - Restrictions
+-- (7.0) - Restrictions
 -- -----------------------------------------------------
 -- -----------------------------------------------------
--- (6.1) - Usuario restrictions
+-- (7.1) - Usuario restrictions
 -- -----------------------------------------------------
     ALTER TABLE Usuario 
     ADD CONSTRAINT cValidarCPF 
@@ -664,7 +729,7 @@
     EXECUTE PROCEDURE DeletarLoginOnDB();
 
 -- -----------------------------------------------------
--- (6.2) - CartaoCredito restrictions
+-- (7.2) - CartaoCredito restrictions
 -- -----------------------------------------------------
     ALTER TABLE      CartaoCredito
     ADD CONSTRAINT cValidarNumeroCartaoCredito 
@@ -679,7 +744,7 @@
     CHECK          (CodigoSeguranca >= 0 AND CodigoSeguranca <= 999);
 
 -- -----------------------------------------------------
--- (6.3) - Evento restrictions
+-- (7.3) - Evento restrictions
 -- -----------------------------------------------------
     ALTER TABLE    Evento
     ADD CONSTRAINT cValidaridCodigoEvento 
@@ -711,7 +776,7 @@
     EXECUTE PROCEDURE VerificarVendaIngressoEvento ();
 
 -- -----------------------------------------------------
--- (6.4) - Apresentacao restrictions
+-- (7.4) - Apresentacao restrictions
 -- -----------------------------------------------------
     ALTER TABLE      Apresentacao
     ADD CONSTRAINT cValidaridCodigoApresentacao 
@@ -730,7 +795,7 @@
     CHECK          (Disponibilidade >= 0 AND Disponibilidade <= 250);
 
 -- -----------------------------------------------------
--- (6.5) - Ingresso restrictions
+-- (7.5) - Ingresso restrictions
 -- -----------------------------------------------------
     ALTER TABLE      Ingresso
     ADD CONSTRAINT cValidaridCodigoIngresso 
@@ -744,10 +809,10 @@
 
 
 -- -----------------------------------------------------
--- (7.0) - Procedures
+-- (8.0) - Procedures
 -- -----------------------------------------------------
 -- -----------------------------------------------------
--- (7.1) - Procedures Create        
+-- (8.1) - Procedures Create        
 -- -----------------------------------------------------
     CREATE OR REPLACE PROCEDURE CriarUsuario (CPF CHAR(11), Nome VARCHAR(20), Senha CHAR(6), DataNascimento DATE)
     LANGUAGE plpgsql
@@ -785,10 +850,10 @@
     END $insertingresso$;
 
 -- -----------------------------------------------------
--- (7.2) - Procedures Read
+-- (8.2) - Procedures Read
 -- -----------------------------------------------------
 -- -----------------------------------------------------
--- (7.3) - Procedures Update
+-- (8.3) - Procedures Update
 -- -----------------------------------------------------
     CREATE OR REPLACE PROCEDURE UpdateUsuario (uOldCPF CHAR(11), uNewCPF CHAR(11), uNome VARCHAR(20), uSenha CHAR(6), uDatadeNascimento DATE)
     LANGUAGE plpgsql
@@ -826,7 +891,7 @@
     END $updateingresso$;
 
 -- -----------------------------------------------------
--- (7.4) - Procedures Delete
+-- (8.4) - Procedures Delete
 -- -----------------------------------------------------
     CREATE OR REPLACE PROCEDURE DeleteUsuario (uCPF CHAR(11), uSenha CHAR(6), uDatadeNascimento DATE)
     LANGUAGE plpgsql
@@ -864,10 +929,10 @@
     END $deleteingresso$;
 
 -- -----------------------------------------------------
--- (8.0) - Testes e debug
+-- (9.0) - Testes e debug
 -- -----------------------------------------------------
 -- ----------------------------------------------------- 
--- (8.1) - Restrict do DELETE de um CPF com referencia
+-- (9.1) - Restrict do DELETE de um CPF com referencia
 -- -----------------------------------------------------
     -- Verifica se o cpf com referencia não pode ser atualizado 
     -- e nem deletado
@@ -877,7 +942,7 @@
     DELETE FROM Usuario;
     
 -- ----------------------------------------------------- 
--- (8.2) - Cascade do Código de Evento em Apresentacao
+-- (9.2) - Cascade do Código de Evento em Apresentacao
 -- -----------------------------------------------------
     -- Verifica se houve atualizacao do codigo evento 
     CALL CriarEvento ('05370637148', 'Rock in Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
@@ -886,7 +951,7 @@
     SELECT * FROM Apresentacao;
 
 -- ----------------------------------------------------- 
--- (8.3) - Teste dos restrictions Usuario
+-- (9.3) - Teste dos restrictions Usuario
 -- -----------------------------------------------------
     -- Teste do validar CPF
     DELETE FROM Usuario CASCADE;
@@ -896,7 +961,7 @@
     CALL CriarUsuario ('05370637148', 'Alexandre', '12345A', '19/01/20'); -- CPF Invalido
     
 -- ----------------------------------------------------- 
--- (8.4) - Teste dos restrictions CartaoCredito
+-- (9.4) - Teste dos restrictions CartaoCredito
 -- -----------------------------------------------------
     CALL CriarUsuario ('05370637148', 'Alexandre', '1234aA', '19/01/20'); -- CPF Valido
 
@@ -910,7 +975,7 @@
     CALL CriarCartaoCredito ('5467097237169470', '0299', 999::SMALLINT, '05370637148');    SELECT * FROM CartaoCredito;
     
 -- ----------------------------------------------------- 
--- (8.5) - Teste dos restrictions Evento
+-- (9.5) - Teste dos restrictions Evento
 -- -----------------------------------------------------
     -- Verifica formato do nome do evento
     CALL CriarEvento('05370637148', 'Rock in  Rio', 'Formosa', 'L', 'GO', 1::SMALLINT);
@@ -935,7 +1000,7 @@
     DELETE FROM EVENTO;
 
 -- ----------------------------------------------------- 
--- (8.6) - Teste dos restrictions Ingresso
+-- (9.6) - Teste dos restrictions Ingresso
 -- -----------------------------------------------------
     -- Verifica se a quantidade de ingressos comprados tem disponivel
     -- e se disponivel, alterou na tabela apresentacao
