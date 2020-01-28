@@ -15,9 +15,9 @@
 -- Palavras-chave para busca:
 -- Database bancosdedados2020
 -- (0.0) - Create Users
-    -- (0.1) - Create Administradores
-    -- (0.2) - Create Usuarios comuns
-    -- (0.3) - Create Visitantes
+    -- (0.1) - Create Usuarios comuns
+    -- (0.2) - Create Visitantes
+    -- (0.3) - Create Administradores
 -- (1.0) - Create Tables
     -- (1.1) - Table Usuario
     -- (1.2) - Table CartaoCredito
@@ -77,13 +77,35 @@
 -- (0.0) - Create users
 -- -----------------------------------------------------
 -- -----------------------------------------------------
--- (0.1) - Create Administradores
+-- (0.1) - Create Usuarios comuns
+-- ----------------------------------------------------- 
+
+    CREATE ROLE LoginUsuario;
+
+    GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginUsuario;
+
+-- -----------------------------------------------------
+-- (0.2) - Create Visitantes
+-- ----------------------------------------------------- 
+
+    CREATE ROLE LoginVisitante;
+
+    GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginVisitante;
+    GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginVisitante;
+
+    CREATE USER Default_Guest WITH
+    IN ROLE LoginVisitante
+    PASSWORD '123';
+
+-- -----------------------------------------------------
+-- (0.3) - Create Administradores
 -- ----------------------------------------------------- 
 
     CREATE ROLE Administrator WITH
     SUPERUSER
     CREATEROLE
-    INHERIT;
+    INHERIT
+    ADMIN LoginUsuario, LoginVisitante;
 
     GRANT ALL PRIVILEGES ON DATABASE bancosdedados2020 TO Administrator;
     GRANT CONNECT ON DATABASE        bancosdedados2020 TO Administrator;
@@ -93,23 +115,6 @@
     CREATE USER adm WITH 
     IN ROLE Administrator
     PASSWORD '123';
-
--- -----------------------------------------------------
--- (0.2) - Create Usuarios comuns
--- ----------------------------------------------------- 
-
-    CREATE ROLE LoginUsuario;
-
-    GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginUsuario;
-
--- -----------------------------------------------------
--- (0.3) - Create Visitantes
--- ----------------------------------------------------- 
-
-    CREATE ROLE LoginVisitante;
-
-    GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginVisitante;
-    GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginVisitante;
 
 
 -- -----------------------------------------------------
