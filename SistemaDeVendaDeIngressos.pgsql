@@ -1,8 +1,9 @@
--- PENDENCIAS:
--- Criar as trigger que impedem:
---      - atualizar o cpf de um usuario;
+-- PENDENCIAS(JOAO):
+-- Elaborar melhores consultas de insert, read, update e delete 
 -- Testar as procedures de insert
 -- Testar procedures update
+-- PENDENCIAS(Alexandre):
+-- Criar todos os privilegios dos tres tipos de usarios
 -- Inserir backup e recuperação do database
 
 
@@ -92,6 +93,8 @@
 
     GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginVisitante;
     GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginVisitante;
+
+    REVOKE SELECT ON TABLE Usuario FROM LoginVisitante;
 
     CREATE USER Default_Guest WITH
     IN ROLE LoginVisitante
