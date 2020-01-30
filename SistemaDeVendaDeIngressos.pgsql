@@ -38,8 +38,9 @@
     -- (6.1) - Usuario Functions
     -- (6.2) - CartaoCredito Functions
     -- (6.3) - Evento Functions
-    -- (6.4) - Ingresso Functions
-    -- (6.5) - String Functions
+    -- (6.4) - Apresentacao Functions
+    -- (6.5) - Ingresso Functions
+    -- (6.6) - String Functions
 -- (7.0) - Constraint
     -- (7.1) - Usuario restrictions
     -- (7.2) - CartaoCredito restrictions
@@ -86,8 +87,10 @@
     GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginUsuario;
     GRANT USAGE   ON SCHEMA   venda_ingressos   TO LoginUsuario;
     GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
-    GRANT UPDATE ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
-    GRANT DELETE ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
+    GRANT USAGE ON ALL SEQUENCES IN SCHEMA venda_ingressos TO LoginUsuario;
+    GRANT INSERT ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
+    GRANT UPDATE ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
+    GRANT DELETE ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
 
 -- -----------------------------------------------------
 -- (0.2) - Create Visitantes
@@ -266,50 +269,29 @@
 
     CREATE POLICY PSelectUsuario ON Usuario
     FOR SELECT
-    USING (Nome = current_user);
-
-    CREATE POLICY PUpdateUsuario ON Usuario
-    FOR UPDATE 
-    USING (Nome = current_user);
-
-    CREATE POLICY PDeleteUsuario ON Usuario
-    FOR DELETE 
-    USING (Nome = current_user);
+    USING (current_user = Nome);
 
 -- -----------------------------------------------------
 -- (4.2) - Create policy CartaoCredito
 -- ----------------------------------------------------- 
 
-    CREATE POLICY LoginUsuario ON CartaoCredito
+    CREATE POLICY PSelectCartaoCredito ON CartaoCredito
     FOR SELECT 
-    USING (user_name = current_user)
+    USING (TRUE);
+
+    CREATE POLICY PUpdateCartaoCredito ON CartaoCredito
+    FOR UPDATE 
+    USING (TRUE)
 
 -- -----------------------------------------------------
 -- (4.3) - Create policy Evento
 -- ----------------------------------------------------- 
-
-    CREATE POLICY LoginUsuario ON Evento
-    FOR SELECT 
-    USING (user_name = current_user)
-
 -- -----------------------------------------------------
 -- (4.4) - Create policy Apresentacao
 -- ----------------------------------------------------- 
-
-    CREATE POLICY LoginUsuario ON Apresentacao
-    FOR SELECT 
-    USING (user_name = current_user)
-
 -- -----------------------------------------------------
 -- (4.5) - Create policy Ingresso
 -- ----------------------------------------------------- 
-
-    CREATE POLICY LoginUsuario ON Ingresso
-    FOR SELECT 
-    USING (user_name = current_user)
-
-
-
 -- -----------------------------------------------------
 -- (5.0) - Views
 -- -----------------------------------------------------
@@ -667,7 +649,25 @@
     END $$;
 
 -- -----------------------------------------------------
--- (6.4) - Ingresso Functions
+-- (6.4) - Apresentacao Functions
+-- -----------------------------------------------------
+
+    CREATE OR REPLACE FUNCTION VerificaResponsavelEvento () RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN 
+        IF ((SELECT NOME FROM Usuario 
+        JOIN Evento ON idCPF = fkCPF AND idCodigoEvento = 1
+        WHERE Nome = current_user) IS NULL) THEN
+            RAISE EXCEPTION 'Eh permitido criar apresentacoes para eventos que estiver em seu cpf apenas';
+            RETURN NULL;
+        ELSE 
+            RETURN NEW;
+        END IF;
+    END $$;
+
+-- -----------------------------------------------------
+-- (6.5) - Ingresso Functions
 -- -----------------------------------------------------
 
     CREATE OR REPLACE FUNCTION VerificarDisponibilidade () RETURNS TRIGGER
@@ -686,7 +686,7 @@
     END $disp$;
 
 -- -----------------------------------------------------
--- (6.5) - String Functions
+-- (6.6) - String Functions
 -- -----------------------------------------------------
     CREATE OR REPLACE FUNCTION Is_upper (Caractere CHAR(1)) RETURNS BOOLEAN
     LANGUAGE plpgsql
@@ -797,21 +797,26 @@
 -- -----------------------------------------------------
 -- (7.4) - Apresentacao restrictions
 -- -----------------------------------------------------
-    ALTER TABLE      Apresentacao
+    ALTER TABLE    Apresentacao
     ADD CONSTRAINT cValidaridCodigoApresentacao 
     CHECK          (idCodigoApresentacao > -1 AND idCodigoApresentacao < 10000);
 
-    ALTER TABLE      Apresentacao
+    ALTER TABLE    Apresentacao
     ADD CONSTRAINT cValidarPreco 
     CHECK          (Preco >= 0 AND Preco <= 1000);
 
-    ALTER TABLE      Apresentacao
+    ALTER TABLE    Apresentacao
     ADD CONSTRAINT cValidarNumeroSala 
     CHECK          (NumeroSala >= 0 AND NumeroSala <= 10);
 
-    ALTER TABLE      Apresentacao
+    ALTER TABLE    Apresentacao
     ADD CONSTRAINT cValidarDisponibilidade 
     CHECK          (Disponibilidade >= 0 AND Disponibilidade <= 250);
+
+    CREATE TRIGGER cVerificaResponsavelEvento  
+    BEFORE INSERT ON Apresentacao
+    FOR EACH ROW
+    EXECUTE PROCEDURE VerificaResponsavelEvento();
 
 -- -----------------------------------------------------
 -- (7.5) - Ingresso restrictions
@@ -955,7 +960,8 @@
 -- -----------------------------------------------------
     -- Verifica se o cpf com referencia não pode ser atualizado 
     -- e nem deletado
-    CALL CriarUsuario       ('05370637148', 'Alexandre', '1234aA', '19/01/20');
+    CALL CriarUsuario       ('05370637148', 'alexandre', '1234aA', '19/01/20');
+    CALL CriarUsuario       ('63892733040', 'caio', '1234aA', '19/01/20');
     CALL CriarCartaoCredito ('5467097237169470', '0120', '123', '05370637148');
     UPDATE Usuario SET idCPF = '57219981058' WHERE idCPF = '05370637148';
     DELETE FROM Usuario;
@@ -974,7 +980,7 @@
 -- -----------------------------------------------------
     -- Teste do validar CPF
     DELETE FROM Usuario CASCADE;
-    CALL CriarUsuario ('05370637142', 'Alexandre', '1234aA', '19/01/20'); -- CPF Invalido
+    CALL CriarUsuario ('05370637142', 'alexandre', '1234aA', '19/01/20'); -- CPF Invalido
 
     -- Teste do validar senha
     CALL CriarUsuario ('05370637148', 'Alexandre', '12345A', '19/01/20'); -- CPF Invalido
