@@ -84,6 +84,10 @@
     CREATE ROLE LoginUsuario;
 
     GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginUsuario;
+    GRANT USAGE   ON SCHEMA   venda_ingressos   TO LoginUsuario;
+    GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
+    GRANT UPDATE ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
+    GRANT DELETE ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
 
 -- -----------------------------------------------------
 -- (0.2) - Create Visitantes
@@ -92,9 +96,8 @@
     CREATE ROLE LoginVisitante;
 
     GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginVisitante;
-    GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginVisitante;
-
-    REVOKE SELECT ON TABLE Usuario FROM LoginVisitante;
+    GRANT USAGE   ON SCHEMA   venda_ingressos   TO LoginVisitante;
+    GRANT SELECT ON Evento, Apresentacao TO LoginVisitante;
 
     CREATE USER Default_Guest WITH
     IN ROLE LoginVisitante
@@ -261,9 +264,17 @@
 -- (4.1) - Create policy Usuario
 -- ----------------------------------------------------- 
 
-    CREATE POLICY LoginUsuario ON Usuario
-    FOR SELECT 
-    USING (user_name = current_user)
+    CREATE POLICY PSelectUsuario ON Usuario
+    FOR SELECT
+    USING (Nome = current_user);
+
+    CREATE POLICY PUpdateUsuario ON Usuario
+    FOR UPDATE 
+    USING (Nome = current_user);
+
+    CREATE POLICY PDeleteUsuario ON Usuario
+    FOR DELETE 
+    USING (Nome = current_user);
 
 -- -----------------------------------------------------
 -- (4.2) - Create policy CartaoCredito
