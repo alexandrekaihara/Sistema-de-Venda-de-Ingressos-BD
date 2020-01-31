@@ -38,9 +38,8 @@
     -- (6.1) - Usuario Functions
     -- (6.2) - CartaoCredito Functions
     -- (6.3) - Evento Functions
-    -- (6.4) - Apresentacao Functions
-    -- (6.5) - Ingresso Functions
-    -- (6.6) - String Functions
+    -- (6.4) - Ingresso Functions
+    -- (6.5) - String Functions
 -- (7.0) - Constraint
     -- (7.1) - Usuario restrictions
     -- (7.2) - CartaoCredito restrictions
@@ -86,11 +85,17 @@
 
     GRANT CONNECT ON DATABASE bancosdedados2020 TO LoginUsuario;
     GRANT USAGE   ON SCHEMA   venda_ingressos   TO LoginUsuario;
-    GRANT SELECT ON ALL TABLES IN SCHEMA venda_ingressos TO LoginUsuario;
-    GRANT USAGE ON ALL SEQUENCES IN SCHEMA venda_ingressos TO LoginUsuario;
-    GRANT INSERT ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
-    GRANT UPDATE ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
-    GRANT DELETE ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
+    GRANT SELECT  ON ALL TABLES    IN SCHEMA venda_ingressos       TO LoginUsuario;
+    GRANT USAGE   ON ALL SEQUENCES IN SCHEMA venda_ingressos       TO LoginUsuario;
+    GRANT INSERT  ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
+    GRANT UPDATE  ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
+    GRANT DELETE  ON CartaoCredito, Evento, Apresentacao, Ingresso TO LoginUsuario;
+
+    REVOKE UPDATE(idCPF) ON Usuario       FROM LoginUsuario;
+    REVOKE UPDATE(fkCPF) ON CartaoCredito FROM LoginUsuario;
+    REVOKE UPDATE(fkCPF) ON Evento        FROM LoginUsuario;
+    REVOKE UPDATE(fkCodigoEvento, Disponibilidade)     ON Apresentacao FROM LoginUsuario;
+    REVOKE UPDATE(fkCPF, fkCodigoApresentacao, Quantidade) ON Ingresso FROM LoginUsuario;
 
 -- -----------------------------------------------------
 -- (0.2) - Create Visitantes
@@ -271,27 +276,87 @@
     FOR SELECT
     USING (current_user = Nome);
 
+    
+
 -- -----------------------------------------------------
 -- (4.2) - Create policy CartaoCredito
 -- ----------------------------------------------------- 
 
     CREATE POLICY PSelectCartaoCredito ON CartaoCredito
     FOR SELECT 
-    USING (TRUE);
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
+    CREATE POLICY PInsertCartaoCredito ON CartaoCredito
+    FOR INSERT 
+    WITH CHECK (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
 
     CREATE POLICY PUpdateCartaoCredito ON CartaoCredito
     FOR UPDATE 
-    USING (TRUE)
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
+    CREATE POLICY PDeleteCartaoCredito ON CartaoCredito
+    FOR DELETE 
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
 
 -- -----------------------------------------------------
 -- (4.3) - Create policy Evento
 -- ----------------------------------------------------- 
+
+    CREATE POLICY PSelectEvento ON Evento
+    FOR SELECT 
+    USING (TRUE);
+
+    CREATE POLICY PInsertEvento ON Evento
+    FOR INSERT
+    WITH CHECK (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
+    CREATE POLICY PUpdateEvento ON Evento
+    FOR UPDATE 
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
+    CREATE POLICY PDeleteEvento ON Evento
+    FOR DELETE 
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
 -- -----------------------------------------------------
 -- (4.4) - Create policy Apresentacao
 -- ----------------------------------------------------- 
+    
+    CREATE POLICY PSelectApresentacao ON Apresentacao
+    FOR SELECT 
+    USING (TRUE);
+
+    CREATE POLICY PInsertApresentacao ON Apresentacao
+    FOR INSERT
+    WITH CHECK (current_user = (SELECT Nome FROM Usuario AS U JOIN Evento AS E ON U.idCPF = E.fkCPF WHERE E.idCodigoEvento = fkCodigoEvento));
+
+    CREATE POLICY PUpdateApresentacao ON Apresentacao
+    FOR UPDATE 
+    USING (current_user = (SELECT Nome FROM Usuario AS U JOIN Evento AS E ON U.idCPF = E.fkCPF WHERE E.idCodigoEvento = fkCodigoEvento));
+
+    CREATE POLICY PDeleteApresentacao ON Apresentacao
+    FOR DELETE 
+    USING (current_user = (SELECT Nome FROM Usuario AS U JOIN Evento AS E ON U.idCPF = E.fkCPF WHERE E.idCodigoEvento = fkCodigoEvento));
+
 -- -----------------------------------------------------
 -- (4.5) - Create policy Ingresso
 -- ----------------------------------------------------- 
+    CREATE POLICY PSelectIngresso ON Ingresso
+    FOR SELECT 
+    USING (TRUE);
+
+    CREATE POLICY PInsertIngresso ON Ingresso
+    FOR INSERT
+    WITH CHECK (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
+    CREATE POLICY PUpdateIngresso ON Ingresso
+    FOR UPDATE 
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
+    CREATE POLICY PDeleteIngresso ON Ingresso
+    FOR DELETE 
+    USING (current_user = (SELECT Nome FROM Usuario WHERE idCPF = fkCPF));
+
 -- -----------------------------------------------------
 -- (5.0) - Views
 -- -----------------------------------------------------
@@ -479,10 +544,10 @@
         AuxInt = TO_NUMBER(SUBSTRING(NumeroCartaoCredito FROM Indice FOR 1), '9');
         IF (Indice % 2 = 0) THEN
             AuxInt = AuxInt * 2;
+            IF(AuxInt > 9) THEN
+                AuxInt = AuxInt % 10 + FLOOR(AuxInt / 10);
+            END IF;
         END IF;  
-        IF(AuxInt > 9) THEN
-            AuxInt = AuxInt % 10 + FLOOR(AuxInt / 10);
-        END IF;
         Soma = Soma + AuxInt;
         Indice = Indice + 1;
     END LOOP;
@@ -648,26 +713,9 @@
     END IF;
     END $$;
 
--- -----------------------------------------------------
--- (6.4) - Apresentacao Functions
--- -----------------------------------------------------
-
-    CREATE OR REPLACE FUNCTION VerificaResponsavelEvento () RETURNS TRIGGER
-    LANGUAGE plpgsql
-    AS $$
-    BEGIN 
-        IF ((SELECT NOME FROM Usuario 
-        JOIN Evento ON idCPF = fkCPF AND idCodigoEvento = 1
-        WHERE Nome = current_user) IS NULL) THEN
-            RAISE EXCEPTION 'Eh permitido criar apresentacoes para eventos que estiver em seu cpf apenas';
-            RETURN NULL;
-        ELSE 
-            RETURN NEW;
-        END IF;
-    END $$;
 
 -- -----------------------------------------------------
--- (6.5) - Ingresso Functions
+-- (6.4) - Ingresso Functions
 -- -----------------------------------------------------
 
     CREATE OR REPLACE FUNCTION VerificarDisponibilidade () RETURNS TRIGGER
@@ -686,7 +734,7 @@
     END $disp$;
 
 -- -----------------------------------------------------
--- (6.6) - String Functions
+-- (6.5) - String Functions
 -- -----------------------------------------------------
     CREATE OR REPLACE FUNCTION Is_upper (Caractere CHAR(1)) RETURNS BOOLEAN
     LANGUAGE plpgsql
@@ -812,11 +860,6 @@
     ALTER TABLE    Apresentacao
     ADD CONSTRAINT cValidarDisponibilidade 
     CHECK          (Disponibilidade >= 0 AND Disponibilidade <= 250);
-
-    CREATE TRIGGER cVerificaResponsavelEvento  
-    BEFORE INSERT ON Apresentacao
-    FOR EACH ROW
-    EXECUTE PROCEDURE VerificaResponsavelEvento();
 
 -- -----------------------------------------------------
 -- (7.5) - Ingresso restrictions
@@ -962,10 +1005,10 @@
     -- e nem deletado
     CALL CriarUsuario       ('05370637148', 'alexandre', '1234aA', '19/01/20');
     CALL CriarUsuario       ('63892733040', 'caio', '1234aA', '19/01/20');
-    CALL CriarCartaoCredito ('5467097237169470', '0120', '123', '05370637148');
+    CALL CriarCartaoCredito ('5428208790439602', '0120', '123', '05370637148');
     UPDATE Usuario SET idCPF = '57219981058' WHERE idCPF = '05370637148';
-    DELETE FROM Usuario;
-    
+    DELETE FROM Usuario; 
+
 -- ----------------------------------------------------- 
 -- (9.2) - Cascade do Código de Evento em Apresentacao
 -- -----------------------------------------------------
@@ -994,10 +1037,10 @@
     CALL CriarCartaoCredito ('5467097237169471', '0299', 999::SMALLINT, '05370637148');
 
     -- Verifica a validade da data de validade
-    CALL CriarCartaoCredito ('5467097237169470', '0099', 999::SMALLINT, '05370637148');    SELECT * FROM CartaoCredito;
-
+    CALL CriarCartaoCredito ('5467097237169470', '0099', 999::SMALLINT, '05370637148');    
+    
     -- Cartao valido
-    CALL CriarCartaoCredito ('5467097237169470', '0299', 999::SMALLINT, '05370637148');    SELECT * FROM CartaoCredito;
+    CALL CriarCartaoCredito ('5467097237169470', '0299', 999::SMALLINT, '05370637148');    
     
 -- ----------------------------------------------------- 
 -- (9.5) - Teste dos restrictions Evento
