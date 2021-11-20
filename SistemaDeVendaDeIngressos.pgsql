@@ -10,7 +10,6 @@
 -- -----------------------------------------------------
 -- Autores: 
 --      - Alexandre Mitsuru Kaihara (18/0029690)
---      - João Pedro Assunção Coutinho(18/0019813)
 -- Disciplina: Bancos de Dados
 --
 -- Palavras-chave para busca:
